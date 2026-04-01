@@ -1,0 +1,13 @@
+{
+  "name": "multithreaded-sim",
+  "version": "1.0.0",
+  "description": "Real-Time Multi-threaded Application Simulator",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "devDependencies": {
+    "electron": "^41.1.1"
+  }
+}
