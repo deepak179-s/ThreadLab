@@ -6,6 +6,8 @@
 // ── Helpers ───────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if(cls) e.className=cls; if(html!==undefined) e.innerHTML=html; return e; };
+const RUNTIME = window.electronAPI?.isElectron ? 'electron' : 'web';
+const RUNTIME_LABEL = RUNTIME === 'electron' ? 'Electron Desktop' : 'Web Browser';
 
 function chipHTML(id, state, extra = '') {
   const dot = `<span class="state-dot dot-${state}"></span>`;
@@ -27,12 +29,14 @@ function clearLog(id) { const e = $(id); if(e) e.innerHTML = ''; }
 
 // ── Build App Shell ───────────────────────────────────────
 function buildShell() {
+  document.body.dataset.runtime = RUNTIME;
   document.getElementById('app').innerHTML = `
     <div class="titlebar">
       <div class="titlebar-logo">⬡</div>
       <span class="titlebar-title">Multi-threaded Application Simulator</span>
-      <span class="titlebar-subtitle">v1.0.0</span>
+      <span class="titlebar-subtitle">shared runtime</span>
       <div class="titlebar-spacer"></div>
+      <span class="titlebar-runtime ${RUNTIME}">${RUNTIME_LABEL}</span>
       <span class="titlebar-badge" id="tick-badge">tick: 0</span>
     </div>
 
