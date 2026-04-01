@@ -49,12 +49,7 @@ npm run preview   # Alias for web preview
 3. No build command is required.
 4. The included `vercel.json` rewrites requests to `index.html`.
 
-### Render
 
-1. Create a new Static Site.
-2. Point it to this repository.
-3. Set the publish directory to the repo root if Render asks.
-4. The included `render.yaml` keeps routing on the shared web entry.
 
 ## Project Structure
 
@@ -79,7 +74,7 @@ npm run preview   # Alias for web preview
 - The Electron shell now loads the shared root `index.html`.
 - The UI detects whether it is running in Electron or a browser.
 - The same visual design is preserved across both runtimes.
-- Static hosting configuration is included for Vercel and Render.
+- Static hosting configuration is included for Vercel.
 
 ## Notes
 
