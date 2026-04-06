@@ -1,18 +1,46 @@
 {
-  "name": "multithreaded-sim",
+  "name": "threadlab",
   "version": "1.0.0",
-  "description": "Real-Time Multi-threaded Application Simulator",
+  "description": "ThreadLab multithreading simulator",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "desktop": "electron .",
     "dev": "electron . --dev",
     "desktop:dev": "electron . --dev",
+    "dist:mac": "electron-builder --mac dmg",
     "web": "node scripts/serve-static.js",
     "web:host": "node scripts/serve-static.js",
     "preview": "node scripts/serve-static.js"
   },
   "devDependencies": {
-    "electron": "^41.1.1"
+    "electron": "^41.1.1",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.deepak179s.threadlab",
+    "productName": "ThreadLab",
+    "icon": "assets/threadlab.icns",
+    "files": [
+      "index.html",
+      "main.js",
+      "preload.js",
+      "assets/**/*",
+      "package.json",
+      "src/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "icon": "assets/threadlab.icns",
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "dmg": {
+      "artifactName": "ThreadLab-${version}.${ext}"
+    }
   }
 }

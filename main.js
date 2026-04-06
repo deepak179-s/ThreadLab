@@ -7,7 +7,7 @@ function createWindow() {
     height: 860,
     minWidth: 900,
     minHeight: 600,
-    title: 'Real-Time Multi-threaded Application Simulator',
+    title: 'ThreadLab',
     backgroundColor: '#0f1117',
     webPreferences: {
       nodeIntegration: false,

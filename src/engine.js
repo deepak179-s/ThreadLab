@@ -166,11 +166,8 @@ class SyncEngine {
     this.monitorOwner = null;
     this.bufferSize = 0;
     this.bufferMax = 3;
-    this.barrierCount = 0;
-    this.barrierTotal = 4;
     this.logs = [];
     this.onLog = null;
-    this.onBarrierRelease = null;
   }
 
   log(msg, cls = 'info') {
@@ -199,20 +196,12 @@ class SyncEngine {
         {id:'C1', role:'consumer', state:STATE.READY, consumed:0, color:PALETTE[2]},
         {id:'C2', role:'consumer', state:STATE.READY, consumed:0, color:PALETTE[3]},
       ];
-    } else {
-      this.barrierTotal = opts.barrierTotal || 4;
-      this.barrierCount = 0;
-      this.threads = Array.from({length: this.barrierTotal}, (_, i) => ({
-        id: `W${i+1}`, state: STATE.READY, progress: 0, phase: 'working', done: false,
-        color: PALETTE[i % PALETTE.length]
-      }));
     }
   }
 
   tick() {
     if (this.type === 'sem') return this._tickSem();
-    if (this.type === 'monitor') return this._tickMonitor();
-    return this._tickBarrier();
+    return this._tickMonitor();
   }
 
   _tickSem() {
@@ -291,28 +280,6 @@ class SyncEngine {
       if ((t.role==='producer'&&t.produced>=6)||(t.role==='consumer'&&t.consumed>=6)) t.state = STATE.DONE;
     });
     return this.threads.every(t => t.state === STATE.DONE);
-  }
-
-  _tickBarrier() {
-    const working = this.threads.filter(t => t.phase === 'working' && !t.done);
-    working.forEach(t => {
-      t.progress = clamp(t.progress + rnd(4, 10), 0, 100);
-      if (t.progress >= 100) {
-        t.phase = 'barrier_wait'; t.state = STATE.WAITING;
-        this.barrierCount++;
-        this.log(`${t.id} reached barrier (${this.barrierCount}/${this.barrierTotal})`, 'warn');
-        if (this.barrierCount >= this.barrierTotal) {
-          this.log(`All threads at barrier — RELEASED!`, 'ok');
-          if (this.onBarrierRelease) this.onBarrierRelease();
-          this.threads.forEach(th => { th.phase = 'post'; th.state = STATE.RUNNING; th.progress = 100; });
-          setTimeout(() => {
-            this.threads.forEach(th => { th.done = true; th.state = STATE.DONE; });
-          }, 600);
-          this.barrierCount = 0;
-        }
-      }
-    });
-    return this.threads.every(t => t.done);
   }
 }
 
@@ -413,121 +380,9 @@ class SchedulerEngine {
   }
 }
 
-// ── Deadlock Engine ────────────────────────────────────────
-class DeadlockEngine {
-  constructor() {
-    this.reset();
-    this.logs = [];
-    this.onLog = null;
-  }
-
-  log(msg, cls = 'info') {
-    const entry = {msg, cls};
-    this.logs.unshift(entry);
-    if (this.logs.length > 80) this.logs.pop();
-    if (this.onLog) this.onLog(msg, cls);
-  }
-
-  reset() {
-    this.state = 'init';
-    this.threads = [
-      {id:'T1', holds:[], wants:null, state:'ready'},
-      {id:'T2', holds:[], wants:null, state:'ready'},
-      {id:'T3', holds:[], wants:null, state:'ready'},
-    ];
-    this.resources = [
-      {id:'R1', heldBy:null},
-      {id:'R2', heldBy:null},
-      {id:'R3', heldBy:null},
-    ];
-    this.deadlockDetected = false;
-    this.safeSequence = null;
-    this.logs = [];
-  }
-
-  _res(id) { return this.resources.find(r => r.id === id); }
-  _thr(id) { return this.threads.find(t => t.id === id); }
-
-  simulate(onDone) {
-    this.reset();
-    this.log('Simulation started...', 'sys');
-    setTimeout(() => {
-      this._res('R1').heldBy = 'T1'; this._thr('T1').holds = ['R1']; this._thr('T1').state = 'running';
-      this._res('R2').heldBy = 'T2'; this._thr('T2').holds = ['R2']; this._thr('T2').state = 'running';
-      this._res('R3').heldBy = 'T3'; this._thr('T3').holds = ['R3']; this._thr('T3').state = 'running';
-      this.log('T1 acquired R1  |  T2 acquired R2  |  T3 acquired R3', 'ok');
-      if (onDone) onDone('partial');
-    }, 700);
-    setTimeout(() => {
-      this._thr('T1').wants = 'R2'; this._thr('T1').state = 'blocked';
-      this._thr('T2').wants = 'R3'; this._thr('T2').state = 'blocked';
-      this._thr('T3').wants = 'R1'; this._thr('T3').state = 'blocked';
-      this.state = 'deadlock';
-      this.log('T1→R2  T2→R3  T3→R1  ← circular wait forming...', 'warn');
-      if (onDone) onDone('deadlock');
-    }, 1500);
-  }
-
-  detect() {
-    if (this.state !== 'deadlock') return { found: false };
-    this.deadlockDetected = true;
-    const cycle = 'T1 → R2 (held by T2) → T2 → R3 (held by T3) → T3 → R1 (held by T1) → T1';
-    this.log(`DEADLOCK DETECTED: ${cycle}`, 'err');
-    // Banker's: available=0 everywhere, no safe sequence
-    this.safeSequence = null;
-    this.log('Banker\'s Algorithm: no safe sequence exists → UNSAFE STATE', 'err');
-    return { found: true, cycle };
-  }
-
-  resolve(onStep) {
-    if (!this.deadlockDetected) return;
-    this.log('Resolution: preempting R1 from T1...', 'warn');
-    setTimeout(() => {
-      // T3 gets R1
-      this._res('R1').heldBy = 'T3';
-      this._thr('T1').holds = []; this._thr('T1').state = 'waiting';
-      this._thr('T3').wants = null; this._thr('T3').holds = ['R3','R1'];
-      this._thr('T3').state = 'running';
-      this.log('R1 preempted from T1 → T3 can proceed', 'ok');
-      if (onStep) onStep();
-      setTimeout(() => {
-        // T3 finishes
-        this._thr('T3').state = 'done'; this._thr('T3').holds = [];
-        this._res('R3').heldBy = null; this._res('R1').heldBy = null;
-        this.log('T3 completed → released R3, R1', 'ok');
-        // T2 gets R3
-        this._res('R3').heldBy = 'T2';
-        this._thr('T2').wants = null; this._thr('T2').holds = ['R2','R3'];
-        this._thr('T2').state = 'running';
-        if (onStep) onStep();
-        setTimeout(() => {
-          // T2 finishes
-          this._thr('T2').state = 'done'; this._thr('T2').holds = [];
-          this._res('R2').heldBy = null; this._res('R3').heldBy = null;
-          this.log('T2 completed → released R2, R3', 'ok');
-          // T1 gets R2
-          this._res('R2').heldBy = 'T1';
-          this._thr('T1').holds = ['R2']; this._thr('T1').state = 'running';
-          this._thr('T1').wants = null;
-          if (onStep) onStep();
-          setTimeout(() => {
-            this._thr('T1').state = 'done'; this._thr('T1').holds = [];
-            this._res('R2').heldBy = null;
-            this.log('T1 completed → deadlock fully resolved!', 'ok');
-            this.state = 'resolved';
-            this.safeSequence = 'T3 → T2 → T1';
-            if (onStep) onStep();
-          }, 700);
-        }, 700);
-      }, 700);
-    }, 500);
-  }
-}
-
 // ── Export engines to global scope ────────────────────────
 window.ThreadingModelEngine = ThreadingModelEngine;
 window.SyncEngine = SyncEngine;
 window.SchedulerEngine = SchedulerEngine;
-window.DeadlockEngine = DeadlockEngine;
 window.STATE = STATE;
 window.PALETTE = PALETTE;

@@ -1,0 +1,45 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="140" y1="120" x2="900" y2="920" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10213F"/>
+      <stop offset="0.55" stop-color="#0A1327"/>
+      <stop offset="1" stop-color="#050914"/>
+    </linearGradient>
+    <linearGradient id="hex" x1="278" y1="212" x2="748" y2="804" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#59A5FF"/>
+      <stop offset="1" stop-color="#3EE0B1"/>
+    </linearGradient>
+    <linearGradient id="pulse" x1="318" y1="310" x2="696" y2="726" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#86C4FF"/>
+      <stop offset="1" stop-color="#5BF0C0"/>
+    </linearGradient>
+    <filter id="glow" x="184" y="158" width="656" height="708" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/>
+      <feGaussianBlur stdDeviation="26" result="effect1_foregroundBlur_1_2"/>
+    </filter>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#bg)"/>
+  <rect x="88" y="88" width="848" height="848" rx="200" stroke="rgba(140, 188, 255, 0.18)" stroke-width="4"/>
+
+  <g filter="url(#glow)" opacity="0.65">
+    <path d="M512 216L733 343V597L512 724L291 597V343L512 216Z" stroke="url(#hex)" stroke-width="24"/>
+    <path d="M384 415H507L581 511H664" stroke="url(#pulse)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M384 607H465L522 511" stroke="url(#pulse)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <path d="M512 236L716 354V590L512 708L308 590V354L512 236Z" stroke="url(#hex)" stroke-width="18"/>
+  <path d="M384 415H507L581 511H664" stroke="url(#pulse)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M384 607H465L522 511" stroke="url(#pulse)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <circle cx="384" cy="415" r="40" fill="#0F1B34" stroke="#69B6FF" stroke-width="18"/>
+  <circle cx="384" cy="607" r="40" fill="#0F1B34" stroke="#58DDB4" stroke-width="18"/>
+  <circle cx="522" cy="511" r="44" fill="#102444" stroke="#EEF7FF" stroke-width="18"/>
+  <circle cx="664" cy="511" r="40" fill="#0F1B34" stroke="#58DDB4" stroke-width="18"/>
+
+  <circle cx="522" cy="511" r="12" fill="#EEF7FF"/>
+  <circle cx="664" cy="511" r="10" fill="#58DDB4"/>
+  <circle cx="384" cy="607" r="10" fill="#58DDB4"/>
+  <circle cx="384" cy="415" r="10" fill="#69B6FF"/>
+</svg>

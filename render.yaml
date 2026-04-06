@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: real-time-multithreaded-simulator
+    name: threadlab
     runtime: static
     staticPublishPath: .
     pullRequestPreviewsEnabled: true

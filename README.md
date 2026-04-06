@@ -1,6 +1,6 @@
-# Real-Time Multi-threaded Application Simulator
+# ThreadLab
 
-Interactive simulator for threading models, synchronization primitives, CPU scheduling, and deadlock handling.
+Interactive simulator for threading models, synchronization primitives, and CPU scheduling insight.
 
 The project now supports both:
 

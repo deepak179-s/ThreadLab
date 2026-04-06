@@ -8,6 +8,7 @@ const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if(cls) e.className=cls; if(html!==undefined) e.innerHTML=html; return e; };
 const RUNTIME = window.electronAPI?.isElectron ? 'electron' : 'web';
 const RUNTIME_LABEL = RUNTIME === 'electron' ? 'Electron Desktop' : 'Web Browser';
+const PLATFORM = window.electronAPI?.platform || 'web';
 
 function chipHTML(id, state, extra = '') {
   const dot = `<span class="state-dot dot-${state}"></span>`;
@@ -30,11 +31,12 @@ function clearLog(id) { const e = $(id); if(e) e.innerHTML = ''; }
 // ── Build App Shell ───────────────────────────────────────
 function buildShell() {
   document.body.dataset.runtime = RUNTIME;
+  document.body.dataset.platform = PLATFORM;
   document.getElementById('app').innerHTML = `
     <div class="titlebar">
       <div class="titlebar-logo">⬡</div>
-      <span class="titlebar-title">Multi-threaded Application Simulator</span>
-      <span class="titlebar-subtitle">shared runtime</span>
+      <span class="titlebar-title">ThreadLab</span>
+      <span class="titlebar-subtitle">multithreading simulator</span>
       <div class="titlebar-spacer"></div>
       <span class="titlebar-runtime ${RUNTIME}">${RUNTIME_LABEL}</span>
       <span class="titlebar-badge" id="tick-badge">tick: 0</span>
@@ -44,14 +46,12 @@ function buildShell() {
       <button class="tab-btn active" data-tab="model"><span class="tab-icon">⬡</span>Threading Models</button>
       <button class="tab-btn" data-tab="sync"><span class="tab-icon">⚙</span>Synchronization</button>
       <button class="tab-btn" data-tab="sched"><span class="tab-icon">⏱</span>CPU Scheduler</button>
-      <button class="tab-btn" data-tab="dl"><span class="tab-icon">⛔</span>Deadlock</button>
     </div>
 
     <div class="content">
       <div class="panel active" id="panel-model"></div>
       <div class="panel" id="panel-sync"></div>
       <div class="panel" id="panel-sched"></div>
-      <div class="panel" id="panel-dl"></div>
     </div>`;
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -254,7 +254,6 @@ function buildSyncTab() {
       <select class="ctrl-sel" id="sync-sel">
         <option value="sem">Semaphore</option>
         <option value="monitor">Monitor (Mutex + CV)</option>
-        <option value="barrier">Barrier</option>
       </select>
       <div id="sync-extra-ctrl" style="display:flex;gap:8px;align-items:center"></div>
       <button class="btn primary" id="btn-sync-run">▶ Run</button>
@@ -297,11 +296,8 @@ function buildSyncExtraCtrl() {
       <input type="number" class="ctrl-num" id="sem-init" min="1" max="5" value="2" style="width:52px">
       <span class="ctrl-label">Threads:</span>
       <input type="number" class="ctrl-num" id="sync-tcount" min="2" max="8" value="5" style="width:52px">`;
-  } else if (type === 'monitor') {
-    extra.innerHTML = `<span class="ctrl-label">Producer×2 · Consumer×2 · Buffer=3</span>`;
   } else {
-    extra.innerHTML = `<span class="ctrl-label">Barrier count:</span>
-      <input type="number" class="ctrl-num" id="barrier-n" min="2" max="8" value="4" style="width:52px">`;
+    extra.innerHTML = `<span class="ctrl-label">Producer×2 · Consumer×2 · Buffer=3</span>`;
   }
 }
 
@@ -309,15 +305,13 @@ function initSync() {
   const type = $('sync-sel').value;
   syncEngine = new SyncEngine();
   syncEngine.onLog = (msg, cls) => logTo('log-sync', msg, cls);
-  syncEngine.onBarrierRelease = () => renderSync();
   const opts = {};
   if (type === 'sem') {
     opts.semMax = parseInt($('sem-init')?.value) || 2;
     opts.threadCount = parseInt($('sync-tcount')?.value) || 5;
   }
-  if (type === 'barrier') opts.barrierTotal = parseInt($('barrier-n')?.value) || 4;
   syncEngine.init(type, opts);
-  $('sync-state-title').textContent = {sem:'Semaphore State',monitor:'Monitor / Buffer State',barrier:'Barrier State'}[type];
+  $('sync-state-title').textContent = {sem:'Semaphore State',monitor:'Monitor / Buffer State'}[type];
 }
 
 function startSync() {
@@ -346,7 +340,6 @@ function renderSync() {
     let meta = '';
     if (type === 'monitor' && t.role) meta = `<span class="thread-meta">${t.role}${t.produced!=null?' prod='+t.produced:''}${t.consumed!=null?' cons='+t.consumed:''}</span>`;
     if (type === 'sem' && t.inCS) meta = `<span class="thread-meta" style="color:#3b8cff">in CS</span>`;
-    if (type === 'barrier') meta = `<span class="thread-meta">${t.phase||''} ${Math.round(t.progress)}%</span>`;
     const st = t.state === STATE.RUNNING ? 'running' : t.state;
     return chipHTML(t.id, st, meta);
   }).join('');
@@ -378,13 +371,6 @@ function renderSync() {
         <div>Buffer: <span style="font-family:var(--mono);letter-spacing:2px">${Array.from({length:bm},(_,i)=>i<bs?'▮':'▯').join(' ')}</span> ${bs}/${bm}</div>
         <div>Waiting: ${threads.filter(t=>t.state===STATE.WAITING).map(t=>t.id).join(', ')||'none'}</div>
       </div>`;
-  } else {
-    const bc = syncEngine.barrierCount, bt = syncEngine.barrierTotal;
-    sb.innerHTML = `
-      <div style="font-size:11px;font-family:var(--mono);margin-bottom:8px">Arrived: ${bc} / ${bt}</div>
-      <div class="barrier-dots">${threads.map(t=>`<div class="barrier-dot ${t.phase==='barrier_wait'?'arrived':t.done?'released':''}" title="${t.id}">${t.id}</div>`).join('')}</div>
-      ${threads.map(t=>`<div style="font-size:10px;font-family:var(--mono);color:var(--text2);margin-bottom:2px">
-        ${t.id}: ${t.phase||'working'} — ${Math.round(t.progress)}%</div>`).join('')}`;
   }
 
   drawSyncSVG(type);
@@ -448,30 +434,11 @@ function drawSyncSVG(type) {
         d += `<line x1="${x}" y1="${y+11}" x2="${200+bm*70}" y2="83" stroke="#2a3347" stroke-width="0.5" marker-end="url(#sa)"/>`;
       }
     });
-  } else {
-    // Barrier
-    const n = threads.length, sp = 560/(n+1);
-    threads.forEach((t, i) => {
-      const x = sp*(i+1)+20;
-      const y = t.phase==='barrier_wait' ? 80 : (t.done ? 100 : 20);
-      const fills = ['#0d2818','#271d08','#1e2636'];
-      const strokes = ['#165a2e','#5a4210','#2a3347'];
-      const phase_i = t.done?0:t.phase==='barrier_wait'?1:2;
-      const col = t.color || '#3b8cff';
-      d += `<circle cx="${x}" cy="${y}" r="14" fill="${fills[phase_i]}" stroke="${strokes[phase_i]}" stroke-width="0.5"/>`;
-      d += `<text x="${x}" y="${y+5}" text-anchor="middle" font-size="9" fill="${t.done?'#22c55e':t.phase==='barrier_wait'?'#f59e0b':col}" font-family="JetBrains Mono" font-weight="500">${t.id}</text>`;
-      if (t.phase!=='barrier_wait'&&!t.done) d += `<line x1="${x}" y1="${y+14}" x2="${x}" y2="95" stroke="${col}" stroke-width="0.5" stroke-dasharray="2 2" opacity="0.4"/>`;
-    });
-    // Barrier wall
-    d += `<rect x="20" y="98" width="560" height="5" rx="2" fill="${syncEngine.barrierCount>0?'#5a4210':'#2a3347'}"/>`;
-    d += `<text x="300" y="120" text-anchor="middle" font-size="9" fill="#4a5568" font-family="JetBrains Mono">BARRIER (${syncEngine.barrierCount}/${syncEngine.barrierTotal} arrived)</text>`;
   }
 
   svg.innerHTML = d;
 }
 
-// ════════════════════════════════════════════════════════════
-// TAB 3 — CPU SCHEDULER
 // ════════════════════════════════════════════════════════════
 let schedEngine = new SchedulerEngine();
 let schedInterval = null;
@@ -619,209 +586,8 @@ function renderSched() {
   </table>`;
 }
 
-// ════════════════════════════════════════════════════════════
-// TAB 4 — DEADLOCK
-// ════════════════════════════════════════════════════════════
-let dlEngine = new DeadlockEngine();
-
-function buildDeadlockTab() {
-  $('panel-dl').innerHTML = `
-    <div class="ctrl-row">
-      <button class="btn primary" id="btn-dl-sim">▶ Simulate</button>
-      <button class="btn" id="btn-dl-detect">🔍 Detect Deadlock</button>
-      <button class="btn success" id="btn-dl-resolve">✓ Resolve</button>
-      <button class="btn" id="btn-dl-reset">↺ Reset</button>
-    </div>
-    <div class="panel-scroll">
-      <div id="dl-banner" class="dl-banner"></div>
-      <div id="dl-safe-banner" class="dl-safe-banner"></div>
-      <div class="grid-2" style="margin-bottom:12px">
-        <div class="card">
-          <div class="card-title">Resource Allocation Graph</div>
-          <div class="rag-canvas" id="rag-canvas"><svg id="rag-svg" viewBox="0 0 320 220"></svg></div>
-        </div>
-        <div class="card">
-          <div class="card-title">Thread &amp; Resource State</div>
-          <div id="dl-state"></div>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:12px">
-        <div class="card-title">Banker's Algorithm — Safety Analysis</div>
-        <div class="banker-box" id="banker-box">Run the simulation and click Detect to see the Banker's Algorithm analysis.</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Event Log</div>
-        <div class="log-panel" id="log-dl"></div>
-      </div>
-    </div>`;
-
-  $('btn-dl-sim').addEventListener('click', () => {
-    clearLog('log-dl');
-    $('dl-banner').classList.remove('active');
-    $('dl-safe-banner').classList.remove('active');
-    $('banker-box').innerHTML = 'Simulation running...';
-    dlEngine.reset();
-    dlEngine.onLog = (msg, cls) => logTo('log-dl', msg, cls);
-    dlEngine.simulate(state => { renderDeadlock(); });
-  });
-
-  $('btn-dl-detect').addEventListener('click', () => {
-    const res = dlEngine.detect();
-    if (res.found) {
-      $('dl-banner').innerHTML = `⚠ DEADLOCK DETECTED — Circular wait: T1 → R2 → T2 → R3 → T3 → R1 → T1`;
-      $('dl-banner').classList.add('active');
-      $('dl-safe-banner').classList.remove('active');
-      $('banker-box').innerHTML = `<span class="unsafe">UNSAFE STATE — No safe sequence exists.</span>
-Available: R1=0, R2=0, R3=0 (all held)
-Allocation: T1=[R1], T2=[R2], T3=[R3]
-Need:       T1=[R2], T2=[R3], T3=[R1]
-
-<span class="unsafe">Banker's traversal: no thread can complete with zero available resources.</span>
-<span class="highlight">Resolution strategy: preempt R1 from T1 → chain reaction unblocks T3 → T2 → T1</span>`;
-    } else if (dlEngine.state === 'resolved') {
-      $('dl-safe-banner').innerHTML = `✓ Safe sequence: ${dlEngine.safeSequence} — system is deadlock-free`;
-      $('dl-safe-banner').classList.add('active');
-      $('dl-banner').classList.remove('active');
-    } else {
-      logTo('log-dl', 'No deadlock detected — run simulation first', 'warn');
-    }
-    renderDeadlock();
-  });
-
-  $('btn-dl-resolve').addEventListener('click', () => {
-    if (dlEngine.state !== 'deadlock') { logTo('log-dl','Run simulation and detect deadlock first','warn'); return; }
-    $('dl-banner').classList.remove('active');
-    dlEngine.resolve(() => {
-      renderDeadlock();
-      if (dlEngine.state === 'resolved') {
-        $('dl-safe-banner').innerHTML = `✓ Deadlock resolved — Safe sequence: ${dlEngine.safeSequence}`;
-        $('dl-safe-banner').classList.add('active');
-        $('banker-box').innerHTML = `<span class="safe">DEADLOCK RESOLVED via preemption.</span>
-Safe sequence achieved: <span class="safe">${dlEngine.safeSequence}</span>
-
-Steps taken:
-1. Preempt R1 from T1 → T3 unblocks (holds R3 + R1)
-2. T3 completes → releases R3, R1
-3. T2 acquires R3 → completes → releases R2, R3
-4. T1 acquires R2 → completes → releases R2
-
-All threads terminated successfully. System is now deadlock-free.`;
-      }
-    });
-  });
-
-  $('btn-dl-reset').addEventListener('click', () => {
-    dlEngine.reset();
-    dlEngine.onLog = (msg, cls) => logTo('log-dl', msg, cls);
-    $('dl-banner').classList.remove('active');
-    $('dl-safe-banner').classList.remove('active');
-    $('banker-box').innerHTML = 'Run the simulation and click Detect to see the Banker\'s Algorithm analysis.';
-    clearLog('log-dl');
-    renderDeadlock();
-  });
-
-  dlEngine.onLog = (msg, cls) => logTo('log-dl', msg, cls);
-  renderDeadlock();
-}
-
-function renderDeadlock() {
-  const threads = dlEngine.threads;
-  const resources = dlEngine.resources;
-
-  // State panel
-  const stateEl = $('dl-state');
-  const stateFills = {ready:'#0d1e33',running:'#0d2818',blocked:'#250d0d',waiting:'#271d08',done:'#1a1f2a'};
-  const stateStrokes = {ready:'#1a4a7a',running:'#165a2e',blocked:'#5a1a1a',waiting:'#5a4210',done:'#2a3347'};
-  const stateColors = {ready:'#3b8cff',running:'#22c55e',blocked:'#ef4444',waiting:'#f59e0b',done:'#6b7a94'};
-
-  let html = '<div style="margin-bottom:10px">';
-  threads.forEach(t => {
-    const st = t.state;
-    html += `<div class="dl-state-row">
-      <span class="thread-chip chip-${st==='done'?'done':st==='blocked'?'blocked':st==='waiting'?'waiting':'running'}"
-        style="min-width:36px">
-        <span class="state-dot dot-${st==='done'?'done':st==='blocked'?'blocked':st==='waiting'?'waiting':'running'}"></span>${t.id}
-      </span>
-      <span style="font-size:10px;color:var(--text2)">holds: [${t.holds.join(',')||'—'}]</span>
-      <span style="font-size:10px;color:${t.wants?'#ef4444':'var(--text3)'}">wants: ${t.wants||'—'}</span>
-    </div>`;
-  });
-  html += '</div><div class="card-title" style="margin-top:8px">Resources</div>';
-  resources.forEach(r => {
-    const held = r.heldBy !== null;
-    html += `<div class="dl-state-row">
-      <div class="dl-res-chip ${held?'held':'free'}">${r.id}</div>
-      <span style="font-size:10px;color:${held?'#ef4444':'#22c55e'}">${held?`held by ${r.heldBy}`:'free'}</span>
-    </div>`;
-  });
-  stateEl.innerHTML = html;
-
-  // RAG SVG
-  drawRAG();
-}
-
-function drawRAG() {
-  const svg = $('rag-svg');
-  const threads = dlEngine.threads;
-  const resources = dlEngine.resources;
-
-  // Positions
-  const tp = {T1:{x:60,y:50}, T2:{x:260,y:50}, T3:{x:160,y:170}};
-  const rp = {R1:{x:60,y:165}, R2:{x:260,y:165}, R3:{x:160,y:85}};
-
-  const stFill = {ready:'#0d1e33',running:'#0d2818',blocked:'#250d0d',waiting:'#271d08',done:'#1a1f2a'};
-  const stStroke = {ready:'#1a4a7a',running:'#165a2e',blocked:'#5a1a1a',waiting:'#5a4210',done:'#2a3347'};
-  const stText = {ready:'#3b8cff',running:'#22c55e',blocked:'#ef4444',waiting:'#f59e0b',done:'#6b7a94'};
-
-  let d = `<defs>
-    <marker id="ra-g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M2 2L8 5L2 8" fill="none" stroke="#22c55e" stroke-width="1.5"/></marker>
-    <marker id="ra-r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M2 2L8 5L2 8" fill="none" stroke="#ef4444" stroke-width="1.5"/></marker>
-  </defs>`;
-
-  // Allocation edges (resource → thread, green)
-  resources.forEach(r => {
-    if (r.heldBy) {
-      const rPos = rp[r.id], tPos = tp[r.heldBy];
-      d += `<line x1="${rPos.x}" y1="${rPos.y}" x2="${tPos.x}" y2="${tPos.y}" stroke="#22c55e" stroke-width="1.5" marker-end="url(#ra-g)"/>`;
-    }
-  });
-
-  // Request edges (thread → resource, red dashed)
-  threads.forEach(t => {
-    if (t.wants) {
-      const tPos = tp[t.id], rPos = rp[t.wants];
-      d += `<line x1="${tPos.x}" y1="${tPos.y}" x2="${rPos.x}" y2="${rPos.y}" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 2" marker-end="url(#ra-r)"/>`;
-    }
-  });
-
-  // Thread circles
-  threads.forEach(t => {
-    const p = tp[t.id];
-    const st = t.state;
-    d += `<circle cx="${p.x}" cy="${p.y}" r="20" fill="${stFill[st]||'#1e2636'}" stroke="${stStroke[st]||'#2a3347'}" stroke-width="1"/>`;
-    d += `<text x="${p.x}" y="${p.y+5}" text-anchor="middle" font-size="11" fill="${stText[st]||'#6b7a94'}" font-family="JetBrains Mono" font-weight="600">${t.id}</text>`;
-  });
-
-  // Resource squares
-  resources.forEach(r => {
-    const p = rp[r.id];
-    const held = r.heldBy !== null;
-    d += `<rect x="${p.x-16}" y="${p.y-16}" width="32" height="32" rx="5" fill="${held?'#250d0d':'#1e2636'}" stroke="${held?'#5a1a1a':'#2a3347'}" stroke-width="0.5"/>`;
-    d += `<text x="${p.x}" y="${p.y+5}" text-anchor="middle" font-size="10" fill="${held?'#ef4444':'#6b7a94'}" font-family="JetBrains Mono" font-weight="600">${r.id}</text>`;
-  });
-
-  // Legend
-  d += `<line x1="20" y1="205" x2="44" y2="205" stroke="#22c55e" stroke-width="1.5" marker-end="url(#ra-g)"/>`;
-  d += `<text x="50" y="209" font-size="9" fill="#6b7a94" font-family="JetBrains Mono">allocation</text>`;
-  d += `<line x1="130" y1="205" x2="154" y2="205" stroke="#ef4444" stroke-width="1" stroke-dasharray="4 2" marker-end="url(#ra-r)"/>`;
-  d += `<text x="160" y="209" font-size="9" fill="#6b7a94" font-family="JetBrains Mono">request</text>`;
-
-  svg.innerHTML = d;
-}
-
 // ── Init ──────────────────────────────────────────────────
 buildShell();
 buildModelTab();
 buildSyncTab();
 buildSchedTab();
-buildDeadlockTab();
